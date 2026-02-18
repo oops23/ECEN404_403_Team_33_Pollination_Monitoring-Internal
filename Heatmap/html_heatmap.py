@@ -4,7 +4,7 @@ import math
 import webbrowser
 import os
 import plotly.graph_objects as go
-from bee_classifier import BeeClassifier
+from lidar_ML.bee_classifier import BeeClassifier
 
 # ===============================
 # LIDAR CONFIG
