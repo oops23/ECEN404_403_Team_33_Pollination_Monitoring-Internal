@@ -1,0 +1,6 @@
+📌 On The Camera / UI Side
+
+To save the received heatmap:
+
+with open("heatmap.png", "wb") as f:
+    f.write(packet.payload)

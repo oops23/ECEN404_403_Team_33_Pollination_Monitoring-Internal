@@ -1,0 +1,2 @@
+event_id,flower_id,visit_duration,num_scans,num_angles,min_distance_reached,mean_distance_during_visit,depth_of_interaction,approach_speed,departure_speed,symmetry,std_min_dist,local_minima_count,sign_change_count,total_movement_energy,mean_spread,spread_variance,angle_stability
+1,flower_1,2.3323440551757812,35,4,0.36,0.3753142857142857,0.0,0.05002120780927151,0.02626113409986752,0.02376007370940399,0.018758268924962785,7,13,0.11200000000000004,0.03985714285714285,0.000313208163265306,0.012739273668378712
