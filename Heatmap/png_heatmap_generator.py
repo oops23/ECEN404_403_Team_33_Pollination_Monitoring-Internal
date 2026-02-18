@@ -4,7 +4,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from ML.bee_classifier import BeeClassifier
+from bee_classifier import BeeClassifier
 
 # ===============================
 # LIDAR CONFIG
