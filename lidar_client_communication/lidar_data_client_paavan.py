@@ -25,7 +25,7 @@ from communication_protocol import (
     PACKET_ID_IMAGE_RESPONSE,
     PACKET_ID_LIDAR_RESPONSE,
 )
-from heatmap.heatmap_generator import generate_heatmap_png
+from Heatmap.heatmap_generator import generate_heatmap_png
 
 # ============================================================
 # RECEIVE COMPLETE PACKET FROM BUFFER

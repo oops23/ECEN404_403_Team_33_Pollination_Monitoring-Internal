@@ -26,7 +26,7 @@ class LidarDataServer:
     def __init__(self, host='0.0.0.0', port=12346, save_dir="/home/josiah/pi_program/lidar_data", image_server=None):
         self.host = host
         self.port = port
-        self.save_dir = save_dir
+        self.save_dir = 'lidar_downloads'
         self.server_socket = None
         self.client_socket = None
         self.client_address = None
@@ -44,8 +44,11 @@ class LidarDataServer:
         self.response_lock = threading.Lock()
         
         # Create save directory if it doesn't exist
-        if not os.path.exists(self.save_dir):
-            os.makedirs(self.save_dir)
+        try:
+            if not os.path.exists(self.save_dir):
+                os.makedirs(self.save_dir)
+        except OSError as e:
+            print(f"[LIDAR SERVER] Warning: could not create save directory '{self.save_dir}': {e}")
     
     def start_server(self, timeout=10.0):
         """Start server and wait for LiDAR data client connection 
@@ -182,6 +185,41 @@ class LidarDataServer:
                 print(f"[LIDAR SERVER] Forwarded packet (ID: {packet.header.packet_id}) to image client, event_id: {packet.header.event_id}")
         except Exception as e:
             print(f"Error forwarding to image client: {e}")
+
+    def save_outgoing_lidar_packet(self, packet: Packet):
+        """
+        Save outgoing LiDAR event payload locally using the same naming format
+        as the LiDAR data client.
+        """
+        if packet.header.packet_id != PACKET_ID_LIDAR_OUTGOING:
+            return None
+
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+
+        timestamp = datetime.now().strftime("%m-%d-%Y_%H.%M.%S.%f")[:-3]
+        filename = f"event_data_{packet.header.event_id}_{timestamp}.jsonl"
+        file_path = os.path.join(self.save_dir, filename)
+
+        with open(file_path, "wb") as file_handle:
+            file_handle.write(packet.payload)
+
+        print(f"[LIDAR SERVER] Saved outgoing LiDAR event data: {file_path}")
+        return file_path
+
+    def send_lidar_packet(self, packet: Packet):
+        """
+        Send a LiDAR packet to the connected LiDAR data client.
+        Also saves packet payload locally for outgoing LiDAR event packets.
+        """
+        if not self.connected or not self.client_socket:
+            raise ConnectionError("LiDAR data client is not connected")
+
+        try:
+            self.save_outgoing_lidar_packet(packet)
+        except Exception as e:
+            print(f"[LIDAR SERVER] Warning: local save failed, continuing send: {e}")
+        self.client_socket.sendall(packet.serialize())
     
     
     def __enter__(self):

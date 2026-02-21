@@ -11,8 +11,11 @@ import socket
 import os
 import subprocess
 from datetime import datetime
+import sys
 import threading
 import time
+# Adds the parent directory to the search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from communication_protocol import Packet, PacketHeader, PACKET_ID_IMAGE_OUTGOING, PACKET_ID_IMAGE_RESPONSE, PACKET_ID_LIDAR_RESPONSE
 
 
