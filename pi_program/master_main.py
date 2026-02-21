@@ -38,7 +38,7 @@ IMAGE_SERVER_HOST = '0.0.0.0'
 IMAGE_SERVER_PORT = 12345 
 IMAGE_SAVE_DIR = "/home/josiah/pi_program/captured_images"
 IMAGE_RESOLUTION = '640x480' # max resolution: 3264x2448, default: 640x480
-BURST_SIZE = 5  # Number of images to capture per trigger
+BURST_SIZE = 1  # Number of images to capture per trigger
 
 # LiDAR Data Server Configuration
 LIDAR_DATA_HOST = '0.0.0.0'
@@ -55,7 +55,7 @@ EVENT_END_CONFIRM_SCANS = 5
 WATCHDOG_TIMEOUT = 5.0          # Maximum time between scans before watchdog alert (seconds)
 
 # Connection Timeout Configuration
-CONNECTION_TIMEOUT = 5.0       # Timeout for connection attempts before prompting user (seconds)
+CONNECTION_TIMEOUT = 15.0       # Timeout for connection attempts before prompting user (seconds)
 
 
 # -------------------------------
@@ -250,8 +250,7 @@ def _handle_event_end_async(event, lidar_data_server, lidar_data_client_enabled)
         packet = Packet(header, event_data)
         
         try:
-            serialized = packet.serialize()
-            lidar_data_server.client_socket.sendall(serialized)
+            lidar_data_server.send_lidar_packet(packet)
             print(f"[EVENT {event_id}] Successfully sent event data packet")
         except Exception as e:
             print(f"[EVENT {event_id}] Failed to send event data: {e}")
