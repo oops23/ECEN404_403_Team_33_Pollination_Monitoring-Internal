@@ -19,8 +19,8 @@ CMD_STOP = b"\x02sEN LMDscandata 0\x03"
 
 FLOWERS = {
     "flower_1": {
-        "angle_indices": [131, 132, 133, 134, 135],
-        "background_dist": 0.34
+        "angle_indices": [144, 145, 146, 147],
+        "background_dist": 0.35
     }
 }
 
@@ -48,8 +48,8 @@ def parse_scan(telegram):
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    dataset_folder = os.path.join(script_dir, "lidar_ML", "dataset")
-    os.makedirs(dataset_folder, exist_ok=True)
+    raw_dataset_folder = os.path.join(script_dir, "lidar_ML", "raw_dataset")
+    os.makedirs(raw_dataset_folder, exist_ok=True)
 
     flower_state = {
         fid: {
@@ -137,19 +137,25 @@ def main():
                                 )
 
                                 if state["end_count"] >= END_CONFIRM_SCANS:
+                                    event_id = f"{fid}_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+                                    timestamp = datetime.now().isoformat()
+
                                     event = {
                                         "event_type": "flower_visit",
+                                        "event_id": event_id,
                                         "flower_id": fid,
+                                        "background_dist": bg,
                                         "start_time": state["start_time"],
                                         "end_time": scan_time,
                                         "num_scans": len(state["distance_series"]),
                                         "angles": indices,
-                                        "distance_series": state["distance_series"]
+                                        "distance_series": state["distance_series"],
+                                        "timestamp": timestamp,
+                                        "label": None
                                     }
                                     # Unique filename
-                                    event_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
-                                    filename = f"{fid}_{event_timestamp}.json"
-                                    filepath = os.path.join(dataset_folder, filename)
+                                    filename = f"{event_id}.json"
+                                    filepath = os.path.join(raw_dataset_folder, filename)
 
                                     # Save JSON file
                                     with open(filepath, "w") as event_file:
@@ -170,7 +176,7 @@ def main():
 
         finally:
             s.sendall(CMD_STOP)
-            print(f"Session complete. Events saved in {dataset_folder}")
+            print(f"Session complete. Events saved in {raw_dataset_folder}")
 
 if __name__ == "__main__":
     main()
