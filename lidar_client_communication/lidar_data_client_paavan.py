@@ -16,8 +16,16 @@ import os
 import sys
 from datetime import datetime
 
+# ============================================================
+# PATH CONFIGURATION
+# ============================================================
 # Adds the parent directory to the search path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(parent_dir)
+
+# Add the lidar_ML directory specifically so its internal imports (like feature_extractor) work
+sys.path.append(os.path.join(parent_dir, 'lidar_ML'))
+
 from communication_protocol import (
     Packet,
     PacketHeader,
@@ -25,7 +33,8 @@ from communication_protocol import (
     PACKET_ID_IMAGE_RESPONSE,
     PACKET_ID_LIDAR_RESPONSE,
 )
-from Heatmap.heatmap_generator import generate_heatmap_png
+from heatmap.heatmap_generator import generate_heatmap_png
+
 
 # ============================================================
 # RECEIVE COMPLETE PACKET FROM BUFFER

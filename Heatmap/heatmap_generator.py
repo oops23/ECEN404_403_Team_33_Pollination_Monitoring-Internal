@@ -1,5 +1,4 @@
 # heatmap_generator.py
-
 import io
 import json
 import numpy as np
@@ -12,18 +11,24 @@ from lidar_ML.bee_classifier import BeeClassifier
 ANGLE_START_DEG = 0.0
 ANGLE_INCREMENT_DEG = 0.5
 
-classifier = BeeClassifier()
+# ==========================================
+# INITIALIZE CLASSIFIER WITH PATH
+# ==========================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(BASE_DIR)
+
+# Matches your 'ls' output: bee_model.pkl
+MODEL_FILENAME = "bee_model.pkl" 
+MODEL_PATH = os.path.join(PARENT_DIR, 'lidar_ML', 'models', MODEL_FILENAME)
+
+# Instantiate the classifier
+classifier = BeeClassifier(MODEL_PATH)
 
 # ==========================================
 # GLOBAL STORAGE FOR ACCUMULATED VISITS
 # ==========================================
-# key = (rounded_x, rounded_y)
-# value = visit count
 flower_visit_counts = {}
-
-# distance threshold to consider same flower
 FLOWER_MATCH_THRESHOLD = 0.15  # meters
-
 
 def polar_to_xy(distance_m, angle_index):
     angle_deg = ANGLE_START_DEG + angle_index * ANGLE_INCREMENT_DEG
@@ -46,13 +51,36 @@ def find_existing_flower(x, y):
 
 def process_file(filepath):
     new_positions = []
+    if not os.path.exists(filepath):
+        return new_positions
+
+    print(f"\n[ML CLASSIFICATION] Processing file: {os.path.basename(filepath)}")
+    print(f"{'EVENT_ID':<15} {'PREDICTION':<12} {'BEE_PROB':<10} {'STATUS'}")
+    print("-" * 50)
 
     with open(filepath, "r") as f:
         for line in f:
+            if not line.strip(): continue
             event = json.loads(line)
-            is_bee = classifier.predict(event)
+            if "background_dist" not in event:
+                print("[DEBUG] Missing background_dist in event:", event.get("event_id"))
 
-            if not is_bee:
+            # Predict returns (label, bee_prob)
+            # label, bee_prob = classifier.predict(event)
+            try:
+                label, bee_prob = classifier.predict(event)
+            except Exception as e:
+                print(f"[ERROR] Skipping event due to: {e}")
+                continue
+
+            event_id = event.get("event_id", "N/A")
+            status = "DETECTED" if label == "bee" else "SKIPPED"
+            
+            # This mimics your testing script output
+            print(f"{str(event_id):<15} {label:<12} {bee_prob:0.4f}     {status}")
+
+            # Filter for bees only
+            if label != "bee":
                 continue
 
             angles = event["angles"]
@@ -68,7 +96,8 @@ def process_file(filepath):
                 ys.append(y)
 
             new_positions.append((np.mean(xs), np.mean(ys)))
-
+    
+    print("-" * 50)
     return new_positions
 
 def generate_heatmap_png(filepath):
@@ -79,9 +108,7 @@ def generate_heatmap_png(filepath):
     # UPDATE GLOBAL FLOWER COUNTS
     # ==========================================
     for x, y in new_positions:
-
         existing = find_existing_flower(x, y)
-
         if existing:
             flower_visit_counts[existing] += 1
         else:
@@ -100,7 +127,6 @@ def generate_heatmap_png(filepath):
         counts.append(count)
 
     total_visits = sum(counts)
-
     fig, ax = plt.subplots(figsize=(8, 8))
 
     ax.set_facecolor("#f8fafc")
@@ -118,17 +144,11 @@ def generate_heatmap_png(filepath):
     )
 
     plt.colorbar(scatter, ax=ax, label="Visits per Flower")
-
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-
     ax.set_xlabel("Distance X (m)")
     ax.set_ylabel("Distance Y (m)")
-
-    ax.set_title(
-        f"Pollinator Activity Map\nTotal Visits: {total_visits}"
-    )
-
+    ax.set_title(f"Pollinator Activity Map\nTotal Visits: {total_visits}")
     ax.set_aspect("equal", adjustable="box")
 
     padding = 0.2

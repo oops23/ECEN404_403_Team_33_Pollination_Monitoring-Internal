@@ -33,7 +33,13 @@ def extract_features(event):
     scans_per_second = num_scans / duration if duration > 0 else 0
 
     # background distance recorded when the flower was calibrated
-    background = event["background_dist"]
+    # background = event["background_dist"]
+    background = event.get("background_dist", None)
+
+    if background is None:
+        # fallback: estimate from distances
+        all_distances = [d for scan in event["distance_series"] for d in scan]
+        background = max(all_distances)  # safe approximation
 
     # -----------------------------
     # Flatten all distances
@@ -98,22 +104,22 @@ def extract_features(event):
 
     # Return all features as a list for CSV writing
     return [
-        event["event_id"],
-        duration,
-        num_scans,
-        scans_per_second,
-        min_distance,
-        max_distance,
-        mean_distance,
-        std_distance,
-        max_intrusion,
-        mean_intrusion,
-        intrusion_std,
-        intrusion_ratio,
-        temporal_variation,
-        spatial_spread,
-        event["label"]
-    ]
+    event.get("event_id", "unknown"),
+    duration,
+    num_scans,
+    scans_per_second,
+    min_distance,
+    max_distance,
+    mean_distance,
+    std_distance,
+    max_intrusion,
+    mean_intrusion,
+    intrusion_std,
+    intrusion_ratio,
+    temporal_variation,
+    spatial_spread,
+    event.get("label", None)   # ✅ safe
+]
 
 
 def main():

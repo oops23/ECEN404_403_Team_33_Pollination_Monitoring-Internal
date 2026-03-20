@@ -231,7 +231,7 @@ class EventDetector:
                             "event_type": "flower_visit",
                             "event_id": event_id,
                             "flower_id": fid,
-                            "background_dist": bg,
+                            "background_dist": float(bg),
                             "start_time": state["start_time"],
                             "end_time": scan_time,
                             "num_scans": len(state["distance_series"]),
