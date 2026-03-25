@@ -17,9 +17,7 @@ ANGLE_INCREMENT_DEG = 0.5
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
 
-# Matches your 'ls' output: bee_model.pkl
-MODEL_FILENAME = "bee_model.pkl" 
-MODEL_PATH = os.path.join(PARENT_DIR, 'lidar_ML', 'models', MODEL_FILENAME)
+MODEL_PATH = os.path.join(PARENT_DIR, 'lidar_ML', 'models', "bee_model.pkl")
 
 # Instantiate the classifier
 classifier = BeeClassifier(MODEL_PATH)
@@ -30,13 +28,15 @@ classifier = BeeClassifier(MODEL_PATH)
 flower_visit_counts = {}
 FLOWER_MATCH_THRESHOLD = 0.15  # meters
 
+# ==========================================
+# HELPERS
+# ==========================================
 def polar_to_xy(distance_m, angle_index):
     angle_deg = ANGLE_START_DEG + angle_index * ANGLE_INCREMENT_DEG
     angle_rad = math.radians(angle_deg)
     x = distance_m * math.cos(angle_rad)
     y = distance_m * math.sin(angle_rad)
     return x, y
-
 
 def find_existing_flower(x, y):
     """
@@ -48,43 +48,103 @@ def find_existing_flower(x, y):
             return (fx, fy)
     return None
 
+def is_daytime():
+    hour = datetime.now().hour
+    return 6 <= hour < 18   # simple version
 
-def process_file(filepath):
+# ==========================================
+# PROCESS FILE
+# ==========================================
+def process_file(filepath, camera_data=None):
     new_positions = []
     if not os.path.exists(filepath):
         return new_positions
 
-    print(f"\n[ML CLASSIFICATION] Processing file: {os.path.basename(filepath)}")
-    print(f"{'EVENT_ID':<15} {'PREDICTION':<12} {'BEE_PROB':<10} {'STATUS'}")
-    print("-" * 50)
+    print(f"\n========== EVENT PROCESSING FILE: {os.path.basename(filepath)} ==========")
+    use_camera = is_daytime() and camera_data is not None
 
+    if use_camera:
+        print("[FUSION MODE] DAY → Confidence Fusion (Camera vs LiDAR)")
+    else:
+        print("[FUSION MODE] NIGHT → LiDAR Only")
+
+    print(f"{'EVENT_ID':<15} {'SOURCE':<12} {'PREDICTION':<12} {'CONFIDENCE':<10} {'STATUS'}")
+    print("-" * 70)
+        
     with open(filepath, "r") as f:
         for line in f:
-            if not line.strip(): continue
-            event = json.loads(line)
-            if "background_dist" not in event:
-                print("[DEBUG] Missing background_dist in event:", event.get("event_id"))
+            if not line.strip(): 
+                continue
 
-            # Predict returns (label, bee_prob)
-            # label, bee_prob = classifier.predict(event)
+            event = json.loads(line)
+
+            # Predict returns (label, lidar_conf)
             try:
-                label, bee_prob = classifier.predict(event)
+                label, lidar_conf = classifier.predict(event)
             except Exception as e:
                 print(f"[ERROR] Skipping event due to: {e}")
                 continue
-
-            event_id = event.get("event_id", "N/A")
-            status = "DETECTED" if label == "bee" else "SKIPPED"
             
-            # This mimics your testing script output
-            print(f"{str(event_id):<15} {label:<12} {bee_prob:0.4f}     {status}")
+            event_id = event.get("event_id", "N/A")
+            lidar_is_bee = (label == "bee")
 
-            # Filter for bees only
-            if label != "bee":
+            # ======================================
+            # CAMERA DATA
+            # ======================================
+            camera_conf = 0.0
+            camera_is_bee = False
+
+            if camera_data:
+                cam = camera_data[0]
+                camera_conf = cam.get("confidence", 0.0)
+                camera_is_bee = cam.get("pollinator", False)
+            
+            # ======================================
+            # LOG BOTH SOURCES
+            # ======================================
+            print(f"{str(event_id):<15} {'LIDAR':<10} "
+                  f"{'pollinator' if lidar_is_bee else 'not_pollinator':<18} "
+                  f"{lidar_conf:0.3f}          -")
+
+            if camera_data:
+                print(f"{str(event_id):<15} {'CAMERA':<10} "
+                      f"{'pollinator' if camera_is_bee else 'not_pollinator':<18} "
+                      f"{camera_conf:0.3f}          -")
+                            
+            # ======================================
+            # FUSION LOGIC
+            # ======================================
+            if use_camera:
+                if camera_conf >= lidar_conf:
+                    is_bee = camera_is_bee
+                    source = "CAMERA"
+                else:
+                    is_bee = lidar_is_bee
+                    source = "LIDAR"
+            else:
+                is_bee = lidar_is_bee
+                source = "LIDAR"
+
+            status = "DETECTED" if is_bee else "SKIPPED"
+
+            print(f"{str(event_id):<15} {source:<10} "
+                  f"{'pollinator' if is_bee else 'not_pollinator':<18} "
+                  f"{max(camera_conf, lidar_conf):0.3f}          {status}")
+
+            print("-" * 70)
+
+            if not is_bee:
                 continue
 
+            # ======================================
+            # POSITION COMPUTATION
+            # ======================================
             angles = event["angles"]
             distance_series = event["distance_series"]
+            if not angles or not distance_series:
+                print("[WARNING] Missing angles or distance_series")
+                continue
+
             avg_distances = np.mean(distance_series, axis=0)
 
             xs = []
@@ -97,12 +157,14 @@ def process_file(filepath):
 
             new_positions.append((np.mean(xs), np.mean(ys)))
     
-    print("-" * 50)
     return new_positions
 
-def generate_heatmap_png(filepath):
+# ==========================================
+# MAIN HEATMAP GENERATOR
+# ==========================================
+def generate_heatmap_png(filepath, camera_data=None):
 
-    new_positions = process_file(filepath)
+    new_positions = process_file(filepath, camera_data)
 
     # ==========================================
     # UPDATE GLOBAL FLOWER COUNTS

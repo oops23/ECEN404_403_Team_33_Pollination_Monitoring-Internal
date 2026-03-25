@@ -14,6 +14,7 @@
 import socket
 import os
 import sys
+import json
 from datetime import datetime
 
 # ============================================================
@@ -141,23 +142,60 @@ def handle_image_response_packet(packet: Packet):
     Returns:
         event_id of the response
     """
-    print(f"[LIDAR CLIENT] Received image response (2050) from image client")
-    print(f"[LIDAR CLIENT] Event ID: {packet.header.event_id}")
-    print(f"[LIDAR CLIENT] Image payload size: {len(packet.payload)} bytes")
-    
-    return packet.header.event_id
+    print(f"[LIDAR-IMAGE CLIENT] Received image response (2050) from image client")
+    print(f"[LIDAR-IMAGE CLIENT] Event ID: {packet.header.event_id}")
+    try:
+        payload_str = packet.payload.decode("utf-8")
+        lines = payload_str.strip().split("\n")
+
+        results = []
+
+        for line in lines:
+            data = json.loads(line)
+
+            detections = data.get("detections", [])
+            total = data.get("total_detections", 0)
+
+            # check if any pollinator detected
+            pollinator_detected = False
+            max_conf = 0.0
+
+            for det in detections:
+                class_name = det.get("class_name", "").lower()
+                confidence = det.get("confidence", 0)
+                
+                if class_name in ["honeybee", "bumblebee"]:
+                    if confidence > max_conf:
+                        max_conf = confidence
+                    if confidence > 0.5:
+                        pollinator_detected = True
+
+            print(f"[CAMERA] Detections: {total}")
+            print(f"[CAMERA] Pollinator: {pollinator_detected} | Max Conf: {max_conf:.3f}")
+
+            results.append({
+                "pollinator": pollinator_detected,
+                "count": total,
+                "confidence": max_conf
+            })
+
+        return packet.header.event_id, results
+
+    except Exception as e:
+        print(f"[LIDAR-IMAGE CLIENT ERROR] Failed to parse image response: {e}")
+        return packet.header.event_id, None
 
 # ============================================================
 # CREATE 2025 RESPONSE PACKET
 # ============================================================
-def create_lidar_response_packet(event_id: str, json_file_path: str):
+def create_lidar_response_packet(event_id: str, json_file_path: str, camera_data=None):
     """
     Generate heatmap PNG and package into response packet.
     """
 
     print("[LIDAR CLIENT] Generating heatmap...")
 
-    png_bytes = generate_heatmap_png(json_file_path)
+    png_bytes = generate_heatmap_png(json_file_path, camera_data)
 
     if png_bytes is None:
         print("[LIDAR CLIENT] No bees detected. Sending empty payload.")
@@ -180,6 +218,7 @@ def main():
     HOST = "10.250.76.217" # Rasp Pi : 192.168.1.74 (Home WIFI) : 10.250.76.217 (TAMU IoT)
     PORT = 12346 # Different port from image client
     download_dir = "lidar_downloads"
+    camera_results = {}   # event_id -> camera info
 
     try:
         # Create TCP socket and connect to server
@@ -219,21 +258,27 @@ def main():
                 # --------------------------------------------------
                 elif packet_id == PACKET_ID_IMAGE_RESPONSE:
 
-                    print("[LIDAR CLIENT] Received image response (2050)")
-                    print(f"[LIDAR CLIENT] Event ID: {event_id}")
+                    event_id, cam_result = handle_image_response_packet(packet)
+
+                    if cam_result is not None:
+                        camera_results[event_id] = cam_result
 
                     if event_id in pending_files:
                         json_file_path = pending_files[event_id]
 
                         response_packet = create_lidar_response_packet(
-                            event_id, json_file_path
+                            event_id,
+                            json_file_path,
+                            camera_results.get(event_id)
                         )
 
-                        # IMPORTANT: always use sendall
                         client_socket.sendall(response_packet.serialize())
+
                         print(f"[LIDAR CLIENT] Sent 2025 response for event {event_id}\n")
 
                         del pending_files[event_id]
+                        if event_id in camera_results:
+                            del camera_results[event_id]
 
                 else:
                     print(f"[LIDAR CLIENT] Unknown packet ID: {packet_id}")

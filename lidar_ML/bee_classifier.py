@@ -23,11 +23,11 @@ class BeeClassifier:
         prediction = self.model.predict([numeric_features])[0]
         probability = self.model.predict_proba([numeric_features])[0]
 
-        bee_prob = probability[1]
+        lidar_conf = probability[1]
 
         if prediction == 1:
             label = "bee"
         else:
             label = "not_bee"
 
-        return label, bee_prob
+        return label, lidar_conf
