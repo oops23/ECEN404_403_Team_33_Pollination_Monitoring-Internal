@@ -1,0 +1,22 @@
+{
+  "name": "farmer-dashboard-backend",
+  "version": "0.0.0",
+  "main": "server4.js",
+  "scripts": {
+    "dev": "nodemon server4.js",
+    "start": "node server4.js",
+    "lint": "echo \"no linter configured\""
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0",
+    "dotenv": "^16.0.0",
+    "winston": "^3.9.0",
+    "node-fetch": "^2.6.7",
+    "form-data": "^4.0.0", 
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}

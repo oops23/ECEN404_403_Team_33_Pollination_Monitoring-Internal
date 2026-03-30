@@ -1,0 +1,82 @@
+import { useEffect, useRef } from "react";
+import insectStore from "../state/insectStore";
+import activityStore from "../state/activityStore";
+
+function getHourFromFilename(filename) {
+  if (!filename || typeof filename !== "string") return null;
+  const parts = filename.split("_");
+  if (parts.length < 5) return null;
+  const hour = parts[parts.length - 1].split(".")[0];
+  return isNaN(hour) ? null : parseInt(hour, 10);
+}
+
+function mapDetectionToLabels(det) {
+  if (!det) return { species: "Unknown", role: "Unknown", confidence: 0 };
+  const species = det.class_name || "Unknown";
+  const pollinators = new Set(["bee", "butterfly", "ladybug", "pollinator"]);
+  const role = pollinators.has(species.toLowerCase()) ? "Pollinator" : "Pest";
+  return { species, role, confidence: det.confidence ?? 0 };
+}
+
+export default function useAutoDetect(pollIntervalMs = 5000) {
+  const seen = useRef(new Set());
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function processFile(filename) {
+      try {
+        const res = await fetch("http://localhost:3000/detect-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename }),
+        });
+        const data = await res.json();
+
+        const top = data.detections?.[0];
+        if (!top) return;                        // nothing found: ignore
+        const mapped = mapDetectionToLabels(top);
+        if (mapped.species === "Unknown") return; // skip Unknown
+
+        const hour = getHourFromFilename(filename);
+        activityStore.addActivity([{ hour, species: mapped.species }]);
+
+        if (mapped.role === "Pollinator") {
+          insectStore.update("pollinators", [
+            { label: mapped.species, value: 1 },
+          ]);
+        } else {
+          insectStore.update("pests", [
+            { label: mapped.species, value: 1 },
+          ]);
+        }
+      } catch (err) {
+        console.error("auto-detect failed for", filename, err);
+      }
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("http://localhost:3000/images/annotated");
+        const files = await res.json();
+        if (!mounted) return;
+
+        files.forEach((f) => {
+          if (!seen.current.has(f)) {
+            seen.current.add(f);
+            processFile(f);
+          }
+        });
+      } catch (e) {
+        console.error("poll error", e);
+      }
+    }
+
+    poll();
+    const id = setInterval(poll, pollIntervalMs);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, [pollIntervalMs]);
+}
