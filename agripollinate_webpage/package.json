@@ -1,0 +1,16 @@
+{
+  "name": "agripollinate_webpage",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "concurrently -n \"FRONTEND,BACKEND,ML\" -c \"cyan,green,yellow\" \"npm run dev --prefix farmer-dashboard\" \"npm run dev --prefix farmer-dashboard-backend\" \"npm run dev:ml\"",
+    "dev:ml": "node farmer-dashboard-backend/ml/run.js",
+    "build": "npm run build --prefix farmer-dashboard && npm run build --prefix farmer-dashboard-backend",
+    "setup:ml": "cd farmer-dashboard-backend/ml && python3 -m venv venv",
+    "setup:ml:install": "node farmer-dashboard-backend/ml/setup-ml.js",
+    "setup": "npm install && npm install --prefix farmer-dashboard && npm install --prefix farmer-dashboard-backend && npm run setup:ml && npm run setup:ml:install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
