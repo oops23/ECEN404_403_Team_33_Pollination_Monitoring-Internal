@@ -1,11 +1,13 @@
 require('dotenv').config();
-const { execSync } = require('child_process');
-try {
-    execSync(`tailscale up --authkey=${process.env.TAILSCALE_AUTHKEY}`);
-    console.log('✅ Tailscale connected');
-} catch (e) {
-    console.error('❌ Tailscale error:', e.message);
-}
+const tsnet = require('tsnet');
+
+const ts = new tsnet.Server({
+    hostname: 'render-backend',
+    authkey: process.env.TAILSCALE_AUTHKEY
+});
+
+await ts.ready();
+console.log('✅ Tailscale connected');
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
