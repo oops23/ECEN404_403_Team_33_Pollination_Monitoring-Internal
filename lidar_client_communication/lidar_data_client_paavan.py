@@ -15,6 +15,7 @@ import socket
 import os
 import sys
 import json
+import struct
 from datetime import datetime
 
 # ============================================================
@@ -98,7 +99,9 @@ def handle_lidar_packet(packet: Packet, download_dir="lidar_downloads"):
     Once received, sends LiDAR response packet (2025).
 
     Returns:
-        Tuple of (event_id, packet) for tracking
+        Tuple of (file_path, flower_id) where 
+        - file_path is the saved JSONL file path and 
+        - flower_id is extracted from the JSONL (or "unknown" if not found).
     """
 
     try:
@@ -115,14 +118,32 @@ def handle_lidar_packet(packet: Packet, download_dir="lidar_downloads"):
         with open(file_path, "wb") as f:
             f.write(packet.payload)
 
+        # ----------------------------------------------------
+        # Extract flower_id from JSONL
+        # ----------------------------------------------------
+        flower_id = "unknown"
+
+        try:
+            with open(file_path, "r") as f:
+                first_line = f.readline().strip()
+                if first_line:
+                    data = json.loads(first_line)
+                    flower_id = data.get("flower_id", "unknown")
+        except Exception as e:
+            print(f"[LIDAR CLIENT] Failed to extract flower_id: {e}")
+
+        # ----------------------------------------------------
+        # Logging
+        # ----------------------------------------------------    
         print("=" * 90)
         print(f"[LIDAR CLIENT] Event ID: {packet.header.event_id}")
+        print(f"[LIDAR CLIENT] Flower ID: {flower_id}")
         print(f"[LIDAR CLIENT] Received and Saved Scan data || File: {file_path}")
         # print(f"[LIDAR CLIENT] Payload size: {len(packet.payload)} bytes")
         print(f"[LIDAR CLIENT] Waiting for image client response (2050)...")
 
         # return packet.header.event_id, file_path
-        return file_path
+        return file_path, flower_id
 
     except Exception as e:
         print(f"Error handling LiDAR packet: {e}")
@@ -186,23 +207,49 @@ def handle_image_response_packet(packet: Packet):
 # ============================================================
 # CREATE 2025 RESPONSE PACKET
 # ============================================================
-def create_lidar_response_packet(event_id: str, json_file_path: str, camera_data=None):
+def create_lidar_response_packet(event_id: str, json_file_path: str, camera_data=None, flower_id=None):
     """
     Generate heatmap PNG and package into response packet.
     """
 
     print("[LIDAR CLIENT] Generating heatmap...")
 
-    png_bytes = generate_heatmap_png(json_file_path, camera_data)
+    # png_bytes = generate_heatmap_png(json_file_path, camera_data)
 
-    if png_bytes is None:
+    # if png_bytes is None:
+    #     print("[LIDAR CLIENT] No bees detected. Sending empty payload.")
+    #     png_bytes = b""
+
+    # header = PacketHeader(event_id, PACKET_ID_LIDAR_RESPONSE) # Response packet ID for LiDAR client
+    # packet = Packet(header, png_bytes) # Payload is the PNG image bytes
+
+    # print(f"[LIDAR CLIENT] Heatmap ready ({len(png_bytes)} bytes)")
+
+    result = generate_heatmap_png(json_file_path, camera_data, flower_id)
+    if result is None:
         print("[LIDAR CLIENT] No bees detected. Sending empty payload.")
         png_bytes = b""
+        detection_json = json.dumps({"pollinator_detected": False}).encode("utf-8")
+    else:
+        png_bytes, detection_json = result
+    
+    # Save the detection JSON locally
+    detection_dir = "detection_results"
+    os.makedirs(detection_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%m-%d-%Y_%H.%M.%S.%f")[:-3]
+    detection_path = os.path.join(detection_dir, f"detection_{event_id}_{timestamp}.json")
+    with open(detection_path, "wb") as f:
+        f.write(detection_json)
+    print(f"[LIDAR CLIENT] Detection JSON saved: {detection_path}")
 
-    header = PacketHeader(event_id, PACKET_ID_LIDAR_RESPONSE) # Response packet ID for LiDAR client
-    packet = Packet(header, png_bytes) # Payload is the PNG image bytes
+    # Payload = [4-byte PNG length][PNG bytes][JSON bytes]
+    png_len = struct.pack(">I", len(png_bytes))   # 4-byte big-endian unsigned int
+    combined_payload = png_len + png_bytes + detection_json
 
-    print(f"[LIDAR CLIENT] Heatmap ready ({len(png_bytes)} bytes)")
+    header = PacketHeader(event_id, PACKET_ID_LIDAR_RESPONSE)
+    packet = Packet(header, combined_payload)
+    print(f"[LIDAR CLIENT] Heatmap ready ({len(png_bytes)} bytes PNG + {len(detection_json)} bytes JSON)")
+    
     print("[LIDAR CLIENT] Sending 2025 response to server")
 
     return packet
@@ -234,14 +281,18 @@ def main():
         # =====================================================
         def try_process_event(event_id):
             if event_id in pending_files and event_id in camera_results:
-
-                json_file_path = pending_files[event_id]
+                
+                event_data = pending_files[event_id]
+                json_file_path = event_data["file_path"]
+                flower_id = event_data["flower_id"]
                 cam_data = camera_results[event_id]
 
+                print(f"[EVENT INFO] Event {event_id} triggered at Flower: {flower_id}")
                 response_packet = create_lidar_response_packet(
                     event_id,
                     json_file_path,
-                    cam_data
+                    cam_data,
+                    flower_id
                 )
 
                 client_socket.sendall(response_packet.serialize())
@@ -276,15 +327,18 @@ def main():
                 # LIDAR PACKET (1025) FROM SERVER
                 # --------------------------------------------------
                 if packet_id == PACKET_ID_LIDAR_OUTGOING:
-
-                    file_path = handle_lidar_packet(packet, download_dir)
+                    
+                    file_path, flower_id = handle_lidar_packet(packet, download_dir)
 
                     # guard against bad save
                     if file_path is None:
                         continue
-                
-                    pending_files[event_id] = file_path
-
+                    
+                    pending_files[event_id] = {
+                        "file_path": file_path,
+                        "flower_id": flower_id
+                    }
+                    
                     # try processing (handles IMAGE → LIDAR case)
                     try_process_event(event_id)
 

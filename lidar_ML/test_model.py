@@ -6,7 +6,7 @@ import numpy as np
 from bee_classifier import BeeClassifier
 
 DATASET_PATH = "test_dataset"
-MODEL_PATH = "models/bee_model.pkl"
+MODEL_PATH = "models/bee_model2.pkl"
 
 classifier = BeeClassifier(MODEL_PATH)
 
@@ -36,10 +36,10 @@ for filename in os.listdir(DATASET_PATH):
     y_true.append(1 if actual == "bee" else 0)
     y_pred.append(1 if prediction == "bee" else 0)
 
-    result = "✓"
+    result = "✅"
 
     if prediction != actual:
-        result = "✗"
+        result = "❌"
     else:
         correct += 1
 
